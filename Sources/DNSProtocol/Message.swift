@@ -502,7 +502,15 @@ extension ByteBuffer: DNSResource {
 extension UInt32 {
     /// Converts the UInt32 to a SocketAddress. This is used for converting the address of a DNS record to a SocketAddress.
     public func socketAddress(port: Int) throws -> SocketAddress {
-        let text = inet_ntoa(in_addr(s_addr: self.bigEndian))!
+        // `in_addr(s_addr:)`'s memberwise initializer doesn't exist on Windows (its ucrt/WinSDK
+        // definition isn't a plain single-field struct the way Darwin/Glibc/Musl's is) - use the
+        // no-argument initializer plus a property assignment instead, which is portable across
+        // all platforms. Confirmed against swift-nio's own NIOCore/SocketAddresses.swift, which
+        // uses exactly this pattern (`var ipv4Addr = in_addr()` then set `.s_addr`) for the same
+        // reason.
+        var addr = in_addr()
+        addr.s_addr = self.bigEndian
+        let text = inet_ntoa(addr)!
         let host = String(cString: text)
 
         return try SocketAddress(ipAddress: host, port: port)

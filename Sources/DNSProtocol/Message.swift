@@ -502,14 +502,18 @@ extension ByteBuffer: DNSResource {
 extension UInt32 {
     /// Converts the UInt32 to a SocketAddress. This is used for converting the address of a DNS record to a SocketAddress.
     public func socketAddress(port: Int) throws -> SocketAddress {
-        // `in_addr(s_addr:)`'s memberwise initializer doesn't exist on Windows (its ucrt/WinSDK
-        // definition isn't a plain single-field struct the way Darwin/Glibc/Musl's is) - use the
-        // no-argument initializer plus a property assignment instead, which is portable across
-        // all platforms. Confirmed against swift-nio's own NIOCore/SocketAddresses.swift, which
-        // uses exactly this pattern (`var ipv4Addr = in_addr()` then set `.s_addr`) for the same
-        // reason.
+        // Neither `in_addr(s_addr:)`'s memberwise initializer nor a `.s_addr` property exist on
+        // Windows - confirmed via two separate real Windows CI failures (DataDock AI, 2026-07-22):
+        // Windows' ucrt/WinSDK `in_addr` genuinely has a different internal layout than
+        // Darwin/Glibc/Musl's, and guessing at its actual field name(s) risks a silently-wrong
+        // byte-ordering bug even if something happens to compile. Sidestep the question entirely
+        // by writing the raw bytes directly into the struct's memory instead of naming a field -
+        // `in_addr` and `UInt32` are both exactly 4 bytes on every platform that matters here, so
+        // this is portable without needing to know the internal layout at all.
         var addr = in_addr()
-        addr.s_addr = self.bigEndian
+        withUnsafeMutableBytes(of: &addr) { rawBuffer in
+            rawBuffer.storeBytes(of: self.bigEndian, as: UInt32.self)
+        }
         let text = inet_ntoa(addr)!
         let host = String(cString: text)
 

@@ -1,6 +1,17 @@
 import NIO
 import DNSProtocol
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif os(Windows)
+import ucrt
+import WinSDK
+#endif
+
 extension DNSClient {
     /// Request IPv4 inverse address (PTR records) from nameserver
     ///
@@ -47,6 +58,18 @@ extension DNSClient {
     ///            names associated with the IPv6 address. The future will fail if the input address
     ///            is invalid or if a network error occurs.
     public func ipv6InverseAddress(_ address: String) -> EventLoopFuture<[ResourceRecord<PTRRecord>]> {
+        #if !(canImport(Darwin) || canImport(Glibc) || canImport(Musl))
+        // `in6_addr`'s field layout (__u6_addr.__u6_addr8 on Darwin/BSD, __in6_u.__u6_addr8 on
+        // Glibc, __in6_union.__s6_addr on Musl) is genuinely platform-specific, and Windows'
+        // IN6_ADDR union has yet another layout entirely. This function is never called anywhere
+        // in DataDockConnectors' own code (confirmed via search) and MongoKitten uses DNSClient
+        // for SRV-record lookups, not reverse PTR lookups - so rather than guess at Windows'
+        // exact field layout with no way to verify it against a real Windows toolchain, fail
+        // loudly instead of risking a silently-wrong byte-ordering bug.
+        return self.loop.makeFailedFuture(
+            IOError(errnoCode: ENOSYS, reason: "\(#function) is not implemented on this platform yet")
+        )
+        #else
         var ipv6Addr = in6_addr()
 
         let retval = withUnsafeMutablePointer(to: &ipv6Addr) {
@@ -137,5 +160,6 @@ extension DNSClient {
                 return record
             }
         }
+        #endif
     }
 }

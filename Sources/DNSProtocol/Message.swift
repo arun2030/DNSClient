@@ -1,6 +1,17 @@
 import NIO
 import Foundation
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif os(Windows)
+import ucrt
+import WinSDK
+#endif
+
 /// The header of a DNS message.
 public struct DNSMessageHeader : Sendable{
     /// The ID of the message. This is used to match responses to requests.

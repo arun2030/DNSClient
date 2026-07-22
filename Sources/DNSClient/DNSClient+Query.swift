@@ -1,6 +1,17 @@
 import NIO
 import NIOConcurrencyHelpers
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif os(Windows)
+import ucrt
+import WinSDK
+#endif
+
 extension DNSClient {
     /// Request A records
     ///
@@ -29,6 +40,16 @@ extension DNSClient {
     ///     - port: The port to use
     /// - returns: A future of SocketAddresses
     public func initiateAAAAQuery(host: String, port: Int) -> EventLoopFuture<[SocketAddress]> {
+        #if !(canImport(Darwin) || canImport(Glibc) || canImport(Musl))
+        // `in6_addr`'s field layout is genuinely platform-specific (three different paths already
+        // needed for Darwin/Glibc/Musl below), and Windows' IN6_ADDR union has yet another layout
+        // with no way to verify it against a real Windows toolchain. This function is never called
+        // anywhere in DataDockConnectors' own code or by MongoKitten (confirmed via search) - same
+        // reasoning as PTR.swift's ipv6InverseAddress gate.
+        return self.loop.makeFailedFuture(
+            IOError(errnoCode: ENOSYS, reason: "\(#function) is not implemented on this platform yet")
+        )
+        #else
         let result = self.sendQuery(forHost: host, type: .aaaa)
 
         return result.map { message in
@@ -66,6 +87,7 @@ extension DNSClient {
                 return SocketAddress(sockaddr, host: host)
             }
         }
+        #endif
     }
 
     /// Cancel all queries that are currently running. This will fail all futures with a `CancelError`

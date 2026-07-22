@@ -1,5 +1,17 @@
 import NIO
+import NIOPosix // ChannelOptions.socket / SocketOptionLevel
 import NIOConcurrencyHelpers
+
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif os(Windows)
+import ucrt
+import WinSDK
+#endif
 
 /// A DNS client specialized for multicast DNS (mDNS) operations.
 /// Unlike regular DNS, multicast DNS allows discovering services and devices on a local network
@@ -18,9 +30,14 @@ public final class MulticastDNSClient: DNSClient, @unchecked Sendable {
 
         let dnsDecoder = DNSDecoder(group: group)
 
-        let bootstrap = DatagramBootstrap(group: group)
+        var bootstrap = DatagramBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+        #if !os(Windows)
+        // SO_REUSEPORT has no Windows equivalent at all - see DNSClient+Connect.swift's identical
+        // fix for the full reasoning.
+        bootstrap = bootstrap.channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+        #endif
+        bootstrap = bootstrap
             .channelInitializer { channel in
                 return channel.pipeline.addHandlers(
                     EnvelopeInboundChannel(),

@@ -1,5 +1,17 @@
 import NIO
+import NIOPosix // ChannelOptions.socket / SocketOptionLevel
 import Foundation
+
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif os(Windows)
+import ucrt
+import WinSDK
+#endif
 
 extension DNSClient {
     /// Connect to the dns server
@@ -95,9 +107,15 @@ extension DNSClient {
 
         let dnsDecoder = DNSDecoder(group: group)
 
-        let bootstrap = DatagramBootstrap(group: group)
+        var bootstrap = DatagramBootstrap(group: group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+        #if !os(Windows)
+        // SO_REUSEPORT has no Windows equivalent at all (not just a missing import - the symbol
+        // doesn't exist in Winsock2) - Windows' SO_REUSEADDR above already covers the practical
+        // reuse-on-rebind need this was added for, so this is a real behavior match, not a gap.
+        bootstrap = bootstrap.channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+        #endif
+        bootstrap = bootstrap
             .channelInitializer { channel in
                 return channel.pipeline.addHandlers(
                     EnvelopeInboundChannel(),

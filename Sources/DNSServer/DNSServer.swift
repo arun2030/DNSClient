@@ -1,4 +1,5 @@
 import NIO
+import NIOPosix // ChannelOptions.socketOption
 import NIOConcurrencyHelpers
 import DNSProtocol
 

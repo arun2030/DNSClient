@@ -30,8 +30,11 @@ public final class MulticastDNSClient: DNSClient, @unchecked Sendable {
 
         let dnsDecoder = DNSDecoder(group: group)
 
+        // ChannelOptions.socket(_:_:) doesn't exist on Windows at all (swift-nio guards the whole
+        // function with #if !(os(Windows))) - use the portable typed socketOption(_:) API for
+        // SO_REUSEADDR instead. See DNSClient+Connect.swift's identical fix for the full reasoning.
         var bootstrap = DatagramBootstrap(group: group)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
         #if !os(Windows)
         // SO_REUSEPORT has no Windows equivalent at all - see DNSClient+Connect.swift's identical
         // fix for the full reasoning.

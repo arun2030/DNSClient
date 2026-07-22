@@ -107,12 +107,17 @@ extension DNSClient {
 
         let dnsDecoder = DNSDecoder(group: group)
 
+        // ChannelOptions.socket(_:_:) (raw SocketOptionLevel/SocketOptionName) doesn't exist on
+        // Windows at all - swift-nio guards the whole function with #if !(os(Windows)). Use the
+        // portable typed socketOption(_:) API for SO_REUSEADDR instead (same as DNSServer.swift).
         var bootstrap = DatagramBootstrap(group: group)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
         #if !os(Windows)
-        // SO_REUSEPORT has no Windows equivalent at all (not just a missing import - the symbol
-        // doesn't exist in Winsock2) - Windows' SO_REUSEADDR above already covers the practical
-        // reuse-on-rebind need this was added for, so this is a real behavior match, not a gap.
+        // SO_REUSEPORT has no Windows equivalent at all (the symbol doesn't exist in Winsock2)
+        // and swift-nio has no typed NIOBSDSocket.Option constant for it on any platform, so the
+        // raw socket(_:_:) API (only available outside Windows) is still needed here. Windows'
+        // SO_REUSEADDR above already covers the practical reuse-on-rebind need this was added
+        // for, so skipping it there is a real behavior match, not a gap.
         bootstrap = bootstrap.channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
         #endif
         bootstrap = bootstrap
